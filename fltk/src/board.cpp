@@ -1,5 +1,7 @@
-#include <bitset>
+#include <array>
 #include <iostream>
+#include <memory>
+#include <vector>
 
 #include <FL/Fl.H>
 #include <FL/Fl_Double_Window.H>
@@ -11,14 +13,16 @@ constexpr int k_window_size = 500;
 constexpr int k_window_padding = 20;
 constexpr int k_width_tiles = 5;
 constexpr int k_height_tiles = 4;
+constexpr int k_number_of_tiles = k_width_tiles*k_height_tiles;
 constexpr int k_tile_size = 50;
 
 constexpr int k_main_area_size = k_window_size - 2*k_window_padding;
-constexpr int k_board_h_margin = (k_main_area_size - k_tile_size*k_width_tiles)/2;
-constexpr int k_board_v_margin = (k_main_area_size - k_tile_size*k_height_tiles)/2;
+constexpr int k_board_gap = 20;
+constexpr int k_board_h_margin = (k_main_area_size - (k_tile_size+k_board_gap)*k_width_tiles-k_board_gap)/2;
+constexpr int k_board_v_margin = (k_main_area_size - (k_tile_size+k_board_gap)*k_height_tiles-k_board_gap)/2;
 
-constexpr int a1_bottom_x = k_window_padding + k_board_h_margin;
-constexpr int a1_bottom_y = k_window_padding + k_main_area_size - k_board_v_margin - k_tile_size;
+constexpr int a1_bottom_x = k_window_padding + k_board_h_margin + k_board_gap;
+constexpr int a1_bottom_y = k_window_padding + k_main_area_size - k_board_v_margin - k_tile_size - k_board_gap;
 
 Fl_Color NORMAL_COLOR_BG = fl_rgb_color(  0, 100, 210);
 Fl_Color   GOAL_COLOR_BG = fl_rgb_color(220, 220, 220);
@@ -30,6 +34,7 @@ Fl_Color  TOKEN_COLOR_FG = fl_rgb_color(255, 255, 255);
 Fl_Color BG_COLORS[] = {NORMAL_COLOR_BG, GOAL_COLOR_BG, TABLE_COLOR_BG};
 
 enum class CellType { NORMAL = 0, GOAL, TABLE };
+
 
 class Cell : public Fl_Button {
     public:
@@ -48,11 +53,18 @@ class Cell : public Fl_Button {
         }
 
         void highlighted(bool new_value) {
-            m_highlighted = new_value;
+            if (new_value != m_highlighted) {
+                m_highlighted = new_value;
+                redraw();
+                redraw_label();
+            }
         }
 
-        void reset_content(const char* content = nullptr) {
-            label(content);
+        void reset_content(const char* content = nullptr, bool copy = true) {
+            if (copy)
+                copy_label(content);
+            else
+                label(content);
             reset_color();
         }
 
@@ -99,10 +111,24 @@ class Cell : public Fl_Button {
         bool m_highlighted;
 };
 
+
+// class GameEnv {
+//     public:
+//
+//         GameEnv()
+//
+//     private:
+//         std::unique_ptr<Fl_Window> m_win;
+//         std::unique_ptr<Fl_Box> m_table_surface, m_board;
+//         std::vector<Cell> m_cells;
+// };
+
+
+
+
 void button_callback(Fl_Widget* widget, void* data) {
     auto button = static_cast<Cell*>(widget);
     auto board = static_cast<Cell**>(data);
-    std::cout << button->label() << std::endl;
     button->highlighted(true);
     for (int h = 0; h < k_width_tiles; ++h) {
         for (int v = 0; v < k_height_tiles; ++v) {
@@ -126,14 +152,15 @@ int main(int argc, char **argv) {
 
     for (int h = 0; h < k_width_tiles; ++h) {
         for (int v = 0; v < k_height_tiles; ++v) {
-            int x = a1_bottom_x + h*k_tile_size;
-            int y = a1_bottom_y - v*k_tile_size;
+            CellType cell_type = v==k_height_tiles-1? CellType::GOAL : CellType::NORMAL;
+            int x = a1_bottom_x + h*(k_tile_size+k_board_gap);
+            int y = a1_bottom_y - v*(k_tile_size+k_board_gap);
             char label[3] = {0};
             label[0] = 'A' + h;
             label[1] = '1' + v;
-            board[v][h] = new Cell(x, y, k_tile_size);
+            board[v][h] = new Cell(x, y, k_tile_size, cell_type);
             board[v][h]->callback(button_callback, &board);
-            board[v][h]->copy_label(label);
+            board[v][h]->reset_content(label);
         }
     }
 
