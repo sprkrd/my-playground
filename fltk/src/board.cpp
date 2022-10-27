@@ -121,6 +121,21 @@ struct GameEnvConfig {
 };
 
 
+class PushableScroll : public Fl_Scroll {
+    public:
+        PushableScroll(int x, int y, int w, int h) : Fl_Scroll(x, y, w, h) {}
+
+        virtual int handle(int e) override {
+            if (e == FL_PUSH) {
+                do_callback();
+                return 1;
+            }
+            return Fl_Scroll::handle(e);
+        }
+
+};
+
+
 class GameEnv {
     public:
         GameEnv(const GameEnv& other) = delete;
@@ -253,10 +268,11 @@ class GameEnv {
             border_out->color(BORDER_OUT_BG);
             border_out->labelcolor(fl_contrast(FL_BLACK, BORDER_OUT_BG));
             border_out->label("Tokens outside of board");
-            m_out_view = new Fl_Scroll(x_out, y_out, width_out, height_out);
+            m_out_view = new PushableScroll(x_out, y_out, width_out, height_out);
             m_out_view->type(Fl_Scroll::HORIZONTAL);
             m_out_view->color(WIN_BG);
             m_out_view->box(FL_BORDER_BOX);
+            m_out_view->callback(GameEnv::out_of_board_static_cb, this);
             m_out_view->end();
 
             // create board
@@ -321,6 +337,8 @@ class GameEnv {
             //game_env->remove_from_board(cell);
         //}
         
+
+        
         void move(Cell* src, Cell* dst) {
             dst->reset_content(src->label());
             src->reset_content();
@@ -344,6 +362,11 @@ class GameEnv {
             }
             dst->reset_content(src->label());
             Fl::delete_widget(src);
+        }
+
+        void move_out_of_board(Cell* src) {
+            add_token(src->label());
+            src->reset_content();
         }
 
         void select(Cell* cell, bool at_board) {
@@ -396,6 +419,13 @@ class GameEnv {
                 select(dst, false);
         }
 
+        void out_of_board_cb() {
+            if (m_selected && m_selected_at_board) {
+                move_out_of_board(m_selected);
+                unselect();
+            }
+        }
+
         static void board_cell_static_cb(Fl_Widget* w, void* data) {
             auto cell = static_cast<Cell*>(w);
             auto game_env = static_cast<GameEnv*>(data);
@@ -406,6 +436,11 @@ class GameEnv {
             auto cell = static_cast<Cell*>(w);
             auto game_env = static_cast<GameEnv*>(data);
             game_env->out_of_board_cell_cb(cell);
+        }
+
+        static void out_of_board_static_cb(Fl_Widget*, void* data) {
+            auto game_env = static_cast<GameEnv*>(data);
+            game_env->out_of_board_cb();
         }
 
         GameEnvConfig m_config;
