@@ -12,8 +12,6 @@
 #include <FL/Fl_Scroll.H>
 #include <FL/fl_draw.H>
 
-
-typedef std::unique_ptr<Fl_Window> Fl_WindowPtr;
 typedef std::pair<int,int> Point2i;
 
 constexpr int DEFAULT_BOARD_WIDTH_TILES = 5;
@@ -39,8 +37,8 @@ const Fl_Color          WIN_BG = FL_WHITE;
 const Fl_Color  TOKEN_COLOR_FG = FL_WHITE;
 const Fl_Color        LABEL_BG = FL_WHITE;
 
-enum class CellType { NORMAL = 0, GOAL};
-Fl_Color CELL_BG_COLORS[] = {NORMAL_COLOR_BG, GOAL_COLOR_BG};
+enum class CellType { NORMAL = 0, GOAL, TABLE};
+Fl_Color CELL_BG_COLORS[] = {NORMAL_COLOR_BG, GOAL_COLOR_BG, TABLE_COLOR_BG};
 
 
 class Cell : public Fl_Button {
@@ -66,12 +64,17 @@ class Cell : public Fl_Button {
             }
         }
 
+        bool out_of_board() const {
+            return m_type == CellType::TABLE;
+        }
+
         void reset_content(const char* content = nullptr) {
             copy_label(content);
             if (content)
                 activate();
             else
                 deactivate();
+            highlighted(false);
             reset_color();
         }
 
@@ -111,6 +114,33 @@ class Cell : public Fl_Button {
         bool m_highlighted;
 };
 
+class PushableScroll : public Fl_Scroll {
+    public:
+        PushableScroll(int x, int y, int w, int h) : Fl_Scroll(x, y, w, h),
+                                                     m_pushable(false) {}
+
+        virtual int handle(int e) override {
+            if (m_pushable && e == FL_PUSH) {
+                do_callback();
+                return 1;
+            }
+            return Fl_Scroll::handle(e);
+        }
+
+        bool pushable() const {
+            return m_pushable;
+        }
+
+        void pushable(bool value) {
+            m_pushable = value;
+        }
+
+    private:
+
+        bool m_pushable;
+
+};
+
 struct GameEnvConfig {
     int board_width_tiles = DEFAULT_BOARD_WIDTH_TILES;
     int board_height_tiles = DEFAULT_BOARD_HEIGHT_TILES;
@@ -118,30 +148,16 @@ struct GameEnvConfig {
     int game_view_padding = DEFAULT_MAIN_VIEW_PADDING;
     int table_padding = DEFAULT_TABLE_PADDING;
     int cell_margin = DEFAULT_CELL_MARGIN;
+    bool editable = true;
 };
-
-
-class PushableScroll : public Fl_Scroll {
-    public:
-        PushableScroll(int x, int y, int w, int h) : Fl_Scroll(x, y, w, h) {}
-
-        virtual int handle(int e) override {
-            if (e == FL_PUSH) {
-                do_callback();
-                return 1;
-            }
-            return Fl_Scroll::handle(e);
-        }
-
-};
-
 
 class GameEnv {
     public:
         GameEnv(const GameEnv& other) = delete;
 
-        GameEnv(int x = 0, int y = 0, int w = -1, int h = -1, GameEnvConfig cfg = GameEnvConfig())
-            : m_config(cfg), m_selected(nullptr) {
+        GameEnv(int x = 0, int y = 0, int w = -1, int h = -1,
+                GameEnvConfig cfg = GameEnvConfig()) : m_config(cfg),
+                                                       m_selected(nullptr) {
             if (w == -1)
                 w = Fl_Group::current()->w() - x;
             if (h == -1)
@@ -153,20 +169,12 @@ class GameEnv {
 
         GameEnv& operator=(const GameEnv& other) = delete;
 
-        const Cell* cell_at(const std::string& position) const {
-            
-            if (!is_valid_position_id(position)) {
-                return nullptr;
-            }
-            int idx = to_index(id_to_point2i(position));
-            return m_cells[idx];
+        std::string token_at(const std::string& position) const {
+            const Cell* cell = cell_at(position);
+            if (cell->empty())
+                return std::string();
+            return std::string(cell->label());
         }
-
-        Cell* cell_at(const std::string& position) {
-            const auto* const_this = this;
-            return const_cast<Cell*>(const_this->cell_at(position));
-        }
-
 
         void schedule_for_deletion() {
             Fl::delete_widget(m_view);
@@ -174,16 +182,12 @@ class GameEnv {
         }
 
         void remove_token_at(const std::string& position) {
-            auto cell = cell_at(position);
-            if (!cell)
-                throw std::invalid_argument("Invalid position " + position);
+            Cell* cell = cell_at(position);
             cell->reset_content();
         }
 
         void add_token_at(const std::string& token, const std::string& position) {
-            auto cell = cell_at(position);
-            if (!cell)
-                throw std::invalid_argument("Invalid position " + position);
+            Cell* cell = cell_at(position);
             cell->reset_content(token.c_str());
         }
 
@@ -196,22 +200,69 @@ class GameEnv {
                 x = m_out_of_board.back()->x() + m_config.cell_margin + m_config.tile_size;
             auto current = Fl_Group::current();
             Fl_Group::current(m_out_view);
-            auto cell = new Cell(x, y, m_config.tile_size);
+            auto cell = new Cell(x, y, m_config.tile_size, CellType::TABLE);
             cell->reset_content(token.c_str());
-            cell->callback(GameEnv::out_of_board_cell_static_cb, this);
+            if (m_config.editable)
+                cell->callback(GameEnv::out_of_board_cell_static_cb, this);
             m_out_of_board.push_back(cell);
             Fl_Group::current(current);
+            m_out_view->redraw();
+        }
+
+        void reset() {
+            m_selected = nullptr;
+            for (auto* cell : m_cells)
+                cell->reset_content();
+            clear_out_of_table();
+        }
+
+        void reset(const std::vector<std::string>& board) {
+            m_selected = nullptr;
+            if (board.size() != m_cells.size())
+                throw std::invalid_argument("Invalid vector size size");
+            for (size_t i = 0; i < board.size(); ++i)
+                m_cells[i]->reset_content(board[i].empty()? nullptr : board[i].c_str());
+            clear_out_of_table();
+        }
+
+        void clear_out_of_table() {
+            for (auto* cell : m_out_of_board)
+                Fl::delete_widget(cell);
+            m_out_of_board.clear();
+            m_out_view->redraw();
+        }
+
+        std::vector<std::string> status() const {
+            std::vector<std::string> result;
+            result.reserve(m_cells.size());
+            for (const Cell* cell : m_cells) {
+                if (cell->empty())
+                    result.emplace_back();
+                else
+                    result.emplace_back(cell->label());
+            }
+            return result;
         }
 
         ~GameEnv() {
             delete m_view;
         }
 
-   private:
+    private:
+
+        Cell* cell_at(const std::string& position) {
+            const GameEnv* const_this = this;
+            return const_cast<Cell*>(cell_at(position));
+        }
+
+        const Cell* cell_at(const std::string& position) const {
+            int idx = to_index(id_to_point2i(position));
+            return m_cells[idx];
+        }
 
         int to_index(const Point2i& point) const {
             auto[i,j] = point;
-            int idx = i*m_config.board_width_tiles + j;
+            return i*m_config.board_width_tiles + j;
         }
 
         bool is_valid_position_id(const std::string& id) const {
@@ -222,32 +273,16 @@ class GameEnv {
 
         Point2i id_to_point2i(const std::string& id) const {
             Point2i result;
+            if (!is_valid_position_id(id))
+                throw std::invalid_argument("Position " + id + " is not a valid");
             result.first = m_config.board_height_tiles - (id[1]-'1'+1);
             result.second = id[0] - 'A';
             return result;
         }
 
-        std::string point2i_to_id(const Point2i& point) const {
-            std::string result(2, ' ');
-            result[0] = 'A' + point.second;
-            result[1] = '1' + (m_config.board_height_tiles - point.first - 1);
-            return result;
-        }
-
-        //const Cell* locate(const std::string& token) const {
-            //for (int i = 0; i < m_config.board_height_tiles; ++i) {
-                //for (int j = 0; j < m_config.board_width_tiles; ++j) {
-                    //int idx = to_index({i,j});
-                    //if (token == m_cells[idx]->label())
-                        //return m_cells[idx];
-                //}
-            //}
-        //}
-        
-
         void init() {
             const auto& cfg = m_config;
- 
+
             // create table
             int table_width = m_view->w() - 2*cfg.game_view_padding;
             int table_height = m_view->h() - 2*cfg.game_view_padding;
@@ -272,7 +307,8 @@ class GameEnv {
             m_out_view->type(Fl_Scroll::HORIZONTAL);
             m_out_view->color(WIN_BG);
             m_out_view->box(FL_BORDER_BOX);
-            m_out_view->callback(GameEnv::out_of_board_static_cb, this);
+            if (cfg.editable)
+                m_out_view->callback(GameEnv::out_of_board_static_cb, this);
             m_out_view->end();
 
             // create board
@@ -294,7 +330,8 @@ class GameEnv {
                     int y_cell = y_board + cfg.cell_margin + i*(cfg.cell_margin+cfg.tile_size);
                     CellType cell_type = i==0? CellType::GOAL : CellType::NORMAL;
                     m_cells[idx] = new Cell(x_cell, y_cell, cfg.tile_size, cell_type);
-                    m_cells[idx]->callback(GameEnv::board_cell_static_cb, this);
+                    if (cfg.editable)
+                        m_cells[idx]->callback(GameEnv::board_cell_static_cb, this);
                 }
             }
 
@@ -326,25 +363,12 @@ class GameEnv {
             return box;
         }
 
-        //void remove_from_board(Cell* cell) {
-            //add_token(cell->label());
-            //cell->reset_content();
-        //}
-
-        //static void remove_from_board(Fl_Widget* w, void* data) {
-            //auto cell = static_cast<Cell*>(w);
-            //auto game_env = static_cast<GameEnv*>(data);
-            //game_env->remove_from_board(cell);
-        //}
-        
-
-        
         void move(Cell* src, Cell* dst) {
             dst->reset_content(src->label());
             src->reset_content();
         }
 
-        void move_to_board(Cell* src, Cell* dst) {
+        void remove_token_from_out_of_board(Cell* src) {
             bool found = false;
             int x = src->x();
             for (auto it = m_out_of_board.begin(); it != m_out_of_board.end();) {
@@ -360,8 +384,12 @@ class GameEnv {
                 else
                     ++it;
             }
-            dst->reset_content(src->label());
             Fl::delete_widget(src);
+        }
+
+        void move_to_board(Cell* src, Cell* dst) {
+            dst->reset_content(src->label());
+            remove_token_from_out_of_board(src);
         }
 
         void move_out_of_board(Cell* src) {
@@ -369,12 +397,16 @@ class GameEnv {
             src->reset_content();
         }
 
-        void select(Cell* cell, bool at_board) {
+        std::vector<Cell*> get_all_cells() const {
+            auto result = m_cells;
+            result.insert(result.end(), m_out_of_board.begin(), m_out_of_board.end());
+            return result;
+        }
+
+        void select(Cell* cell) {
             m_selected = cell;
-            m_selected_at_board = at_board;
             cell->highlighted(true);
-            std::vector<Cell*> all_cells(m_cells);
-            all_cells.insert(all_cells.end(), m_out_of_board.begin(), m_out_of_board.end());
+            std::vector<Cell*> all_cells = get_all_cells();
             for (Cell* other : all_cells) {
                 if (other->empty())
                     other->activate();
@@ -386,8 +418,7 @@ class GameEnv {
         void unselect() {
             m_selected->highlighted(false);
             m_selected = nullptr;
-            std::vector<Cell*> all_cells(m_cells);
-            all_cells.insert(all_cells.end(), m_out_of_board.begin(), m_out_of_board.end());
+            std::vector<Cell*> all_cells = get_all_cells();
             for (Cell* other : all_cells) {
                 if (other->empty())
                     other->deactivate();
@@ -397,17 +428,22 @@ class GameEnv {
         }
 
         void board_cell_cb(Cell* dst) {
-            if (m_selected == dst)
+            if (m_selected == dst) {
                 unselect();
+                m_out_view->pushable(false);
+            }
             else if (m_selected) {
-                if (m_selected_at_board)
-                    move(m_selected, dst);
-                else
-                    move_to_board(m_selected, dst);
+                Cell* cpy_selected = m_selected;
                 unselect();
+                if (cpy_selected->out_of_board())
+                    move_to_board(cpy_selected, dst);
+                else
+                    move(cpy_selected, dst);
+                m_out_view->pushable(false);
             }
             else {
-                select(dst, true);
+                select(dst);
+                m_out_view->pushable(true);
             }
         }
 
@@ -416,13 +452,14 @@ class GameEnv {
             if (m_selected)
                 unselect();
             if (cpy_selected != dst)
-                select(dst, false);
+                select(dst);
         }
 
         void out_of_board_cb() {
-            if (m_selected && m_selected_at_board) {
+            if (m_selected && !m_selected->out_of_board()) {
                 move_out_of_board(m_selected);
                 unselect();
+                m_out_view->pushable(false);
             }
         }
 
@@ -445,39 +482,20 @@ class GameEnv {
 
         GameEnvConfig m_config;
         Fl_Group* m_view;
-        Fl_Scroll* m_out_view;
+        PushableScroll* m_out_view;
         std::list<Cell*> m_out_of_board;
         std::vector<Cell*> m_cells;
         Cell* m_selected;
-        bool m_selected_at_board;
 };
-
-
-
-
-//void button_callback(Fl_Widget* widget, void* data) {
-    //auto button = static_cast<Cell*>(widget);
-    //auto board = static_cast<Cell**>(data);
-    //button->highlighted(true);
-    //for (int h = 0; h < k_width_tiles; ++h) {
-        //for (int v = 0; v < k_height_tiles; ++v) {
-            //auto other = board[v*k_width_tiles + h];
-            //if (other == button)
-                //continue;
-            //other->deactivate();
-        //}
-    //}
-    ////button->parent()->redraw();
-//}
 
 
 int main(int argc, char **argv) {
 
     auto win = new Fl_Double_Window(WIN_WIDTH, WIN_HEIGHT);
     GameEnv env;
-    env.add_token("A");
-    env.add_token("242");
-    env.add_token_at("xyz", "B3");
+    for (int i = 0; i < 26; ++i) {
+        env.add_token(std::string(1,'A'+i));
+    }
     win->show(argc, argv);
     win->color(WIN_BG);
     return Fl::run();
