@@ -11,3 +11,9 @@ target_link_libraries(hello fltk)
 add_executable(board board.cpp)
 target_link_libraries(board fltk)
 
+add_executable(resize resize.cpp)
+target_link_libraries(resize fltk)
+
+add_executable(pack pack.cpp)
+target_link_libraries(pack fltk)
+
