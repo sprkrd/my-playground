@@ -10,12 +10,15 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Tile.H>
 #include <FL/Fl_Simple_Terminal.H>
+#include <FL/Fl_Scroll.H>
 
 namespace {
 
 typedef std::tuple<int,int> Point2i;
 
 const char* kColorCodes[] = {"\033[32m", "\033[33m", "\033[31m"};
+
+constexpr Fl_Color kTokenColor = FL_MAGENTA;
  
 std::string DateAndTime() {
     char buff[80];
@@ -85,22 +88,54 @@ void Clip(int& value, int minValue, int maxValue) {
         value = maxValue;
 }
 
+bool IsBetween(int value, int minValue, int maxValue) {
+    return minValue <= value && value <= maxValue;
+}
+
+bool IsWithin(int x, int y, const Fl_Widget* w) {
+    return IsBetween(x, w->x(), w->x() + w->w()-1) &&
+           IsBetween(y, w->y(), w->y() + w->h()-1);
+}
+
 class MovableToken : public Fl_Box {
     public:
 
-        MovableToken(int X, int Y, int W, int H, const char* l = 0) :
-            Fl_Box(X, Y, W, H, l) {
-            box(FL_FLAT_BOX);
-            color(FL_RED);
+        MovableToken(int X, int Y, int size, const char* l = 0) :
+            Fl_Box(X, Y, size, size, l) {
+            box(FL_OFLAT_BOX);
+            ResetColor();
+        }
+
+        void ResetColor() {
+            color(kTokenColor);
+            labelcolor(fl_contrast(FL_WHITE, kTokenColor));
+            redraw();
+        }
+
+        void Highlight() {
+            color(fl_color_average(kTokenColor, FL_WHITE, 0.7));
+            labelcolor(fl_contrast(FL_WHITE, color()));
+            redraw();
         }
 
         int handle(int event) override { 
             switch (event) {
+                case FL_ENTER: {
+                    //std::cout << "FL_ENTER" << std::endl;
+                    Highlight();
+                    return 1;
+                }
+                case FL_LEAVE: {
+                    //std::cout << "FL_LEAVE" << std::endl;
+                    ResetColor();
+                    return 1;
+                }
                 case FL_PUSH: {
                     if (Fl::event_button() == FL_LEFT_MOUSE) {
                         //std::cout << "FL_PUSH" << std::endl;
                         offsetX = Fl::event_x() - x();
                         offsetY = Fl::event_y() - y();
+                        TopLevel();
                         return 1;
                     }
                     break;
@@ -118,13 +153,13 @@ class MovableToken : public Fl_Box {
                             parent()->y()+parentBorderWidthY,
                             parent()->y()+parent()->h()-parentBorderWidthY-h());
                     position(newX, newY);
-                    parent()->redraw();
+                    RedrawParentWithBox();
                     return 1;
                 }
                 case FL_RELEASE: {
                     //std::cout << "FL_RELEASE" << std::endl;
                     parent()->init_sizes();
-                    parent()->redraw();
+                    RedrawParentWithBox();
                     return 1;
                 }
                 default:
@@ -134,8 +169,76 @@ class MovableToken : public Fl_Box {
         }
 
     private:
+
+        void RedrawParentWithBox() {
+            auto* p = parent();
+            while (p->box() == FL_NO_BOX && p->parent())
+                p = p->parent();
+            p->redraw();
+        }
+
+        void TopLevel() {
+            parent()->insert(*this, parent()->children());
+        }
+
         int offsetX;
         int offsetY;
+
+};
+
+class Board {
+    public:
+        void Init() {
+            int boardWidth = (kCellMargin+kTileSize)*kBoardWidthTiles + kCellMargin;
+            int boardHeight = (kCellMargin+kTileSize)*kBoardHeightTiles + kCellMargin;
+            pBoard = new CenteredGroup(boardWidth, boardHeight);
+            pBoard->box(FL_FLAT_BOX);
+            pBoard->color(FL_BLACK);
+            pBoard->end();
+        }
+
+        int TileSize() const {
+            return pCells[0]->w();
+        }
+
+        int CellGap() const {
+            return pCells[0]->x() - pBoard->x();
+        }
+
+        Fl_Box* At(int i, int j) {
+            const auto* const_this = this;
+            return const_cast<Fl_Box*>(const_this->At(i,j));
+        }
+
+        const Fl_Box* At(int i, int j) const {
+            return pCells[i*kBoardWidthTiles + j];
+        }
+
+        const Fl_Box* Snap(int x, int y) const {
+            const Fl_Box* cell = nullptr;
+            if (IsWithin(x, y, pBoard)) {
+                int s = TileSize();
+                int g = CellGap();
+
+                int i = (y - pBoard->y() - g)/(s+g);
+                int j = (x - pBoard->x() - g)/(s+g);
+
+                cell = At(i, j);
+                if (!IsWithin(x, y, cell))
+                    cell = nullptr;
+            }
+            return cell;
+        }
+
+        Fl_Box* Snap(int x, int y) {
+            const auto* const_this = this;
+            return const_cast<Fl_Box*>(const_this->Snap(x, y));
+        }
+
+    private:
+
+        Fl_Group* pBoard;
+        std::vector<Fl_Box*> pCells;
 
 };
 
@@ -188,12 +291,11 @@ class GameGUI::Impl {
         }
 
         void InitSplitWindow() {
+            constexpr int minimumHeight = 100;
             auto* p = Fl_Group::current();
             Fl_Tile* tile = new Fl_Tile(p->x(), p->y(), p->w(), p->h());
-            //auto* limits = new Fl_Box(p->x(), p->y()+50, p->w(), p->h()-100);
-            //limits->box(FL_FLAT_BOX);
-            //limits->color(FL_RED);
-            //tile->resizable(limits);
+            auto* limits = new Fl_Box(p->x(), p->y()+minimumHeight, p->w(), p->h()-2*minimumHeight);
+            tile->resizable(limits);
             InitMainView();
             InitLogTerminal();
             tile->end();
@@ -201,17 +303,24 @@ class GameGUI::Impl {
 
         void InitMainView() {
             auto* p = Fl_Group::current();
-            int mainViewHeight = kDefaultMainViewArea*p->h();
-            pMainView = new Fl_Group(p->x(), p->y(), p->w(), mainViewHeight);
-            pMainView->box(FL_DOWN_BOX);
-            auto token1 = new MovableToken(50, 50, 50, 50);
+            int topTileHeight = kDefaultMainViewArea*p->h();
+            auto* topTile = new Fl_Group(p->x(), p->y(), p->w(), topTileHeight);
+            topTile->box(FL_DOWN_BOX);
+            pMainView = new CenteredGroup(p->w(), topTileHeight);
+
+            new MovableToken(50, 50, 50, "Hey!");
+
+            pBoard.Init();
+
             pMainView->end();
+            topTile->end();
         }
 
         void InitLogTerminal() {
             auto* p = Fl_Group::current();
-            int logTerminalY = pMainView->x() + pMainView->h();
-            int logTerminalHeight = p->h() - pMainView->h();
+            auto* lastChild = p->child(p->children()-1);
+            int logTerminalY = lastChild->x() + lastChild->h();
+            int logTerminalHeight = p->h() - lastChild->h();
             pLogTerminal = new Fl_Simple_Terminal(p->x(), logTerminalY, p->w(), logTerminalHeight);
             pLogTerminal->box(FL_DOWN_BOX);
             pLogTerminal->ansi(true);
@@ -220,6 +329,7 @@ class GameGUI::Impl {
 
         std::unique_ptr<Fl_Window> pWin;
         Fl_Group* pMainView;
+        Board pBoard;
         Fl_Simple_Terminal* pLogTerminal;
         
 };
