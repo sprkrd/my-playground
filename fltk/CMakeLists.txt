@@ -19,6 +19,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 message("Executables dir: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 
-include_directories(${FLTK_INCLUDE_DIRS})
+include_directories(include ${FLTK_INCLUDE_DIRS})
 
 add_subdirectory(src)
