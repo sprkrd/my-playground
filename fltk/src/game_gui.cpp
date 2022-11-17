@@ -8,11 +8,11 @@
 
 #include <FL/Fl.H>
 #include <FL/Fl_Box.H>
+#include <FL/Fl_Double_Window.H>
 #include <FL/Fl_Pack.H>
 #include <FL/Fl_Simple_Terminal.H>
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Tile.H>
-#include <FL/Fl_Window.H>
 #include <FL/names.h>
 
 namespace {
@@ -59,7 +59,7 @@ bool IsWithin(int x, int y, const Fl_Widget* w) {
 
 class Tile : public Fl_Box {
     public:
-        Tile(int X, int Y, const char* l = 0) : Fl_Box(X, Y, kTileSize, kTileSize, l) {
+        Tile(int X, int Y, int size = kTileSize) : Fl_Box(X, Y, size, size) {
             box(FL_OFLAT_BOX);
             pInitialColor = color();
         }
@@ -91,10 +91,11 @@ class Cell;
 
 class Token : public Tile {
     public:
-        Token(int X, int Y, const char* l = 0) :
-            Tile(X, Y, l),
+        Token(int X, int Y, int size = kTileSize, const std::string& l = "") :
+            Tile(X, Y, size),
             pCellAt(nullptr) {
             box(FL_OFLAT_BOX);
+            copy_label(l.c_str());
             ResetColor(kTokenColor);
         }
 
@@ -141,7 +142,8 @@ class Cell : public Tile {
 class GameArea : public Fl_Group {
     public:
         GameArea(bool editable = true) :
-            Fl_Group(0, 0, 1, 1),
+            Fl_Group(Fl_Group::current()->x(), Fl_Group::current()->y(),
+                     Fl_Group::current()->w(), Fl_Group::current()->h()),
             pCells(kNumberOfCells, nullptr),
             pHighlightedToken(nullptr),
             pHighlightedCell(nullptr),
@@ -149,22 +151,19 @@ class GameArea : public Fl_Group {
             pDragOffsetX(0),
             pDragOffsetY(0),
             pEditable(editable) {
-            Fl_Group::resize(parent()->x(), parent()->y(), parent()->w(), parent()->h());
             InitBoard();
             InitOutOfBoardView();
         }
 
         void resize(int X, int Y, int W, int H) override {
-            int W0 = GetInitialWidth();
-            int H0 = GetInitialHeight();
-            W = std::max(W, W0);
-            H = std::max(H, H0);
-            if (W*H0 > H*W0)
-                W = W0 * H/H0;
-            else
-                H = H0 * W/W0;
-            std::tie(X, Y) = AlignCenter(parent()->w(), parent()->h(), W, H);
-            Fl_Group::resize(X, Y, W, H);
+            //W = std::max(W, pW0);
+            //H = std::max(H, pH0);
+            //if (W*pH0 > H*pW0)
+                //W = pW0 * H/pH0;
+            //else
+                //H = pH0 * W/pW0;
+            std::tie(X, Y) = AlignCenter(W, H, w(), h());
+            Fl_Group::resize(X, Y, w(), h());
         }
 
         int handle(int event) override {
@@ -178,6 +177,49 @@ class GameArea : public Fl_Group {
                     array[i] = std::string(tok->label());
             }
             return array;
+        }
+
+        TokenArray GetTokensOutOfBoard() const {
+            TokenArray array(pOutOfBoardView->children());
+            for (size_t i = 0; i < pOutOfBoardView->children(); ++i) {
+                auto* child = pOutOfBoardView->child(i);
+                array[i] = std::string(child->label());
+            }
+            return array;
+        }
+
+        void ResetBoardStatus(const TokenArray& array) {
+            if (array.size() != pCells.size())
+                throw std::invalid_argument("Mismatching array size");
+            auto* previousGroup = Fl_Group::current();
+            Fl_Group::current(this);
+            for (size_t i = 0; i < pCells.size(); ++i) {
+                if (Token* tok = pCells[i]->Content()) {
+                    Fl::delete_widget(tok);
+                    pCells[i]->Content(nullptr);
+                }
+                if (!array[i].empty()) {
+                    std::cout << i << ' ' << array[i] << std::endl;
+                    Token* tok = new Token(0, 0, kTileSize, array[i]);
+                    MoveToken(tok, pCells[i]);
+                }
+            }
+            Fl_Group::current(previousGroup);
+        }
+
+        void ResetTokensOutOfBoard() {
+            pOutOfBoardView->clear();
+            pOutOfBoardView->redraw();
+        }
+
+        void ResetTokensOutOfBoard(const TokenArray& array) {
+            ResetTokensOutOfBoard();
+            auto* previousGroup = Fl_Group::current();
+            Fl_Group::current(pOutOfBoardView);
+            for (const auto& label : array) {
+                new Token(0, 0, pOutOfBoardView->h(), label);
+            }
+            Fl_Group::current(previousGroup);
         }
 
     private:
@@ -203,7 +245,7 @@ class GameArea : public Fl_Group {
                         pDragOffsetY = Fl::event_y() - tok->y();
                         pDraggedToken = tok;
                         insert(*tok, children());
-                        redraw();
+                        parent()->redraw();
                         return 1;
                     }
                     break;
@@ -334,16 +376,6 @@ class GameArea : public Fl_Group {
             return pCells[0]->x() - pBoard->x();
         }
 
-        int GetInitialWidth() {
-            int* s = sizes();
-            return s[1] - s[0];
-        }
-
-        int GetInitialHeight() {
-            int* s = sizes();
-            return s[3] - s[2];
-        }
-
         void InitBoard() {
             int boardWidth = (kCellMargin+kTileSize)*kBoardWidthTiles + kCellMargin;
             int boardHeight = (kCellMargin+kTileSize)*kBoardHeightTiles + kCellMargin;
@@ -360,6 +392,7 @@ class GameArea : public Fl_Group {
                 }
             }
 
+            // Y axis labels
             for (size_t i = 0; i < kBoardHeightTiles; ++i) {
                 int labelX = pBoard->x() - kTileSize - kCellMargin + kTileSize/4;
                 int labelY = pBoard->y() + kCellMargin + i*(kTileSize+kCellMargin) + kTileSize/4;
@@ -371,6 +404,7 @@ class GameArea : public Fl_Group {
                 labelBox->box(FL_BORDER_BOX);
             }
 
+            // X axis labels
             for (size_t j = 0; j < kBoardWidthTiles; ++j) {
                 int labelX = pBoard->x() + kCellMargin + j*(kTileSize+kCellMargin) + kTileSize/4;
                 int labelY = pBoard->y() + pBoard->h() + kCellMargin + kTileSize/4;
@@ -390,6 +424,7 @@ class GameArea : public Fl_Group {
             int outOfBoardW = w() - 2*margin;
             pOutOfBoardView = new Fl_Pack(outOfBoardX, outOfBoardY, outOfBoardW, kTileSize);
             pOutOfBoardView->type(Fl_Pack::HORIZONTAL);
+            pOutOfBoardView->spacing(kCellMargin);
             pOutOfBoardView->resizable(pOutOfBoardView);
             pOutOfBoardView->end();
         }
@@ -399,7 +434,7 @@ class GameArea : public Fl_Group {
         Token* pHighlightedToken;
         Token* pDraggedToken;
         Cell* pHighlightedCell;
-        Fl_Group* pOutOfBoardView;
+        Fl_Pack* pOutOfBoardView;
         int pDragOffsetX;
         int pDragOffsetY;
         bool pEditable;
@@ -423,15 +458,24 @@ class FlLock {
 class GameGUI::Impl {
     public:
         Impl(bool editable) : pEditable(editable) {
-            pWin = std::make_unique<Fl_Window>(kDefaultWindowWidth, kDefaultWindowHeight, "Hey!");
+            pWin = std::make_unique<Fl_Double_Window>(kDefaultWindowWidth, kDefaultWindowHeight, "Board");
             InitSplitWindow();
             pWin->end();
         }
 
-        void SetBoardStatus(const TokenArray& tokens) {
+        void ResetBoardStatus(const TokenArray& tokens) {
+            FlLock lock;
+            pMainView->ResetBoardStatus(tokens);
         }
 
-        void SetTokensOutOfBoard(const TokenArray& tokens) {
+        void ResetTokensOutOfBoard() {
+            FlLock lock;
+            pMainView->ResetTokensOutOfBoard();
+        }
+
+        void ResetTokensOutOfBoard(const TokenArray& tokens) {
+            FlLock lock;
+            pMainView->ResetTokensOutOfBoard(tokens);
         }
 
         void Log(const std::string& message, LogLevel LogLevel) {
@@ -442,11 +486,13 @@ class GameGUI::Impl {
         }
 
         TokenArray GetBoardStatus() const {
-            return TokenArray();
+            FlLock lock;
+            return pMainView->GetBoardStatus();
         }
 
         TokenArray GetTokensOutOfBoard() const {
-            return TokenArray();
+            FlLock lock;
+            return pMainView->GetTokensOutOfBoard();
         }
 
         void Close() {
@@ -484,7 +530,6 @@ class GameGUI::Impl {
             topTile->box(FL_DOWN_BOX);
             topTile->clip_children(1);
             pMainView = new GameArea(pEditable);
-            new Token(50, 50, "Hey!");
             pMainView->end();
             topTile->end();
         }
@@ -512,12 +557,16 @@ GameGUI::GameGUI(bool editable) : pImpl(new Impl(editable)) {
 
 }
 
-void GameGUI::SetBoardStatus(const TokenArray& tokens) {
-    pImpl->SetBoardStatus(tokens);
+void GameGUI::ResetBoardStatus(const TokenArray& tokens) {
+    pImpl->ResetBoardStatus(tokens);
 }
 
-void GameGUI::SetTokensOutOfBoard(const TokenArray& tokens) {
-    pImpl->SetTokensOutOfBoard(tokens);
+void GameGUI::ResetTokensOutOfBoard() {
+    pImpl->ResetTokensOutOfBoard();
+}
+
+void GameGUI::ResetTokensOutOfBoard(const TokenArray& tokens) {
+    pImpl->ResetTokensOutOfBoard(tokens);
 }
 
 void GameGUI::Log(const std::string& message, LogLevel LogLevel) {

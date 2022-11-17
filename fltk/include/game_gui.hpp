@@ -21,9 +21,11 @@ class GameGUI {
 
         GameGUI(bool editable = true);
 
-        void SetBoardStatus(const TokenArray& tokens);
+        void ResetBoardStatus(const TokenArray& tokens);
 
-        void SetTokensOutOfBoard(const TokenArray& tokens);
+        void ResetTokensOutOfBoard();
+
+        void ResetTokensOutOfBoard(const TokenArray& tokens);
 
         void Log(const std::string& message, LogLevel logLevel);
 
