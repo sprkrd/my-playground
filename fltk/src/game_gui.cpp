@@ -3,14 +3,17 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <stdexcept>
 #include <tuple>
 
 #include <FL/Fl.H>
-#include <FL/Fl_Window.H>
 #include <FL/Fl_Box.H>
-#include <FL/Fl_Tile.H>
+#include <FL/Fl_Pack.H>
 #include <FL/Fl_Simple_Terminal.H>
 #include <FL/Fl_Scroll.H>
+#include <FL/Fl_Tile.H>
+#include <FL/Fl_Window.H>
+#include <FL/names.h>
 
 namespace {
 
@@ -18,7 +21,9 @@ typedef std::tuple<int,int> Point2i;
 
 const char* kColorCodes[] = {"\033[32m", "\033[33m", "\033[31m"};
 
-constexpr Fl_Color kTokenColor = FL_MAGENTA;
+const Fl_Color kTokenColor  = FL_RED;
+const Fl_Color kGoalColor   = fl_rgb_color(150, 150, 150);
+const Fl_Color kCellColor   = fl_rgb_color(  0, 100, 210);
  
 std::string DateAndTime() {
     char buff[80];
@@ -36,51 +41,6 @@ Point2i AlignCenter(int parentW, int parentH, int w, int h) {
     return Point2i(AlignCenter(parentW, w), AlignCenter(parentH, h));
 }
 
-class CenteredGroup : public Fl_Group {
-    public:
-        CenteredGroup(int W, int H, const char* l = nullptr) : Fl_Group(0, 0, W, H, l) {
-            auto[X,Y] = AlignCenter(parent()->w(), parent()->h(), W, H);
-            position(X, Y);
-        }
-
-        void resize(int X, int Y, int W, int H) override {
-            int W0 = GetInitialWidth();
-            int H0 = GetInitialHeight();
-            //W = std::max(W, W0);
-            //H = std::max(H, H0);
-            if (W*H0 > H*W0)
-                W = W0 * H/H0;
-            else
-                H = H0 * W/W0;
-            std::tie(X, Y) = AlignCenter(parent()->w(), parent()->h(), W, H);
-            Fl_Group::resize(X, Y, W, H);
-        }
-
-    private:
-
-        int GetInitialWidth() {
-            int* s = sizes();
-            return s[1] - s[0];
-        }
-
-        int GetInitialHeight() {
-            int* s = sizes();
-            return s[3] - s[2];
-        }
-};
-
-class FlLock {
-    public:
-        FlLock() {
-            Fl::lock();
-        }
-
-        ~FlLock() {
-            Fl::unlock();
-            Fl::awake();
-        }
-};
-
 void Clip(int& value, int minValue, int maxValue) {
     if (value < minValue)
         value = minValue;
@@ -97,104 +57,273 @@ bool IsWithin(int x, int y, const Fl_Widget* w) {
            IsBetween(y, w->y(), w->y() + w->h()-1);
 }
 
-class MovableToken : public Fl_Box {
+class Tile : public Fl_Box {
     public:
-
-        MovableToken(int X, int Y, int size, const char* l = 0) :
-            Fl_Box(X, Y, size, size, l) {
+        Tile(int X, int Y, const char* l = 0) : Fl_Box(X, Y, kTileSize, kTileSize, l) {
             box(FL_OFLAT_BOX);
+            pInitialColor = color();
+        }
+
+        void ResetColor(Fl_Color color) {
+            pInitialColor = color;
             ResetColor();
         }
 
         void ResetColor() {
-            color(kTokenColor);
-            labelcolor(fl_contrast(FL_WHITE, kTokenColor));
+            color(pInitialColor);
+            labelcolor(fl_contrast(FL_WHITE, pInitialColor));
             redraw();
         }
 
         void Highlight() {
-            color(fl_color_average(kTokenColor, FL_WHITE, 0.7));
+            Fl_Box::color(fl_color_average(pInitialColor, FL_WHITE, 0.75));
             labelcolor(fl_contrast(FL_WHITE, color()));
             redraw();
         }
 
-        int handle(int event) override { 
+    private:
+
+        Fl_Color pInitialColor;
+
+};
+
+class Cell;
+
+class Token : public Tile {
+    public:
+        Token(int X, int Y, const char* l = 0) :
+            Tile(X, Y, l),
+            pCellAt(nullptr) {
+            box(FL_OFLAT_BOX);
+            ResetColor(kTokenColor);
+        }
+
+        Cell* At() const {
+            return pCellAt;
+        }
+
+        void At(Cell* at) {
+            pCellAt = at;
+        }
+
+        Point2i Center() const {
+            return {x() + w()/2, y() + w()/2};
+        }
+
+    private:
+        Cell* pCellAt;
+};
+
+class Cell : public Tile {
+    public:
+        enum CellType { NORMAL, GOAL };
+
+        Cell(int X, int Y, CellType type = NORMAL) : Tile(X, Y), pContent(nullptr) {
+            ResetColor(type == NORMAL? kCellColor : kGoalColor);
+        }
+
+        bool Empty() const {
+            return !pContent;
+        }
+
+        void Content(Token* tok) {
+            pContent = tok;
+        }
+
+        Token* Content() const {
+            return pContent;
+        }
+
+    private:
+        Token* pContent;
+};
+
+class GameArea : public Fl_Group {
+    public:
+        GameArea(bool editable = true) :
+            Fl_Group(0, 0, 1, 1),
+            pCells(kNumberOfCells, nullptr),
+            pHighlightedToken(nullptr),
+            pHighlightedCell(nullptr),
+            pDraggedToken(nullptr),
+            pDragOffsetX(0),
+            pDragOffsetY(0),
+            pEditable(editable) {
+            Fl_Group::resize(parent()->x(), parent()->y(), parent()->w(), parent()->h());
+            InitBoard();
+            InitOutOfBoardView();
+        }
+
+        void resize(int X, int Y, int W, int H) override {
+            int W0 = GetInitialWidth();
+            int H0 = GetInitialHeight();
+            W = std::max(W, W0);
+            H = std::max(H, H0);
+            if (W*H0 > H*W0)
+                W = W0 * H/H0;
+            else
+                H = H0 * W/W0;
+            std::tie(X, Y) = AlignCenter(parent()->w(), parent()->h(), W, H);
+            Fl_Group::resize(X, Y, W, H);
+        }
+
+        int handle(int event) override {
+            return pEditable? HandleEditable(event) : Fl_Group::handle(event);
+        }
+
+        TokenArray GetBoardStatus() const {
+            TokenArray array(pCells.size());
+            for (size_t i = 0; i < pCells.size(); ++i) {
+                if (Token* tok = pCells[i]->Content())
+                    array[i] = std::string(tok->label());
+            }
+            return array;
+        }
+
+    private:
+
+        int HandleEditable(int event) {
+            auto* tok = dynamic_cast<Token*>(Fl::belowmouse());
             switch (event) {
-                case FL_ENTER: {
-                    //std::cout << "FL_ENTER" << std::endl;
-                    Highlight();
-                    return 1;
+                case FL_ENTER:
+                case FL_MOVE: {
+                    if (ChangeHighlightedToken(tok))
+                        return 1;
+                    break;
                 }
                 case FL_LEAVE: {
-                    //std::cout << "FL_LEAVE" << std::endl;
-                    ResetColor();
-                    return 1;
+                    if (ChangeHighlightedToken(nullptr))
+                        return 1;
+                    break;
                 }
                 case FL_PUSH: {
-                    if (Fl::event_button() == FL_LEFT_MOUSE) {
+                    if (Fl::event_button()==FL_LEFT_MOUSE && tok) {
                         //std::cout << "FL_PUSH" << std::endl;
-                        offsetX = Fl::event_x() - x();
-                        offsetY = Fl::event_y() - y();
-                        TopLevel();
+                        pDragOffsetX = Fl::event_x() - tok->x();
+                        pDragOffsetY = Fl::event_y() - tok->y();
+                        pDraggedToken = tok;
+                        insert(*tok, children());
+                        redraw();
                         return 1;
                     }
                     break;
                 }
                 case FL_DRAG: {
-                    //std::cout << "FL_DRAG" << std::endl;
-                    int parentBorderWidthX = Fl::box_dx(parent()->box());
-                    int parentBorderWidthY = Fl::box_dy(parent()->box());
-                    int newX = Fl::event_x() - offsetX;
-                    int newY = Fl::event_y() - offsetY;
-                    Clip(newX,
-                            parent()->x()+parentBorderWidthX,
-                            parent()->x()+parent()->w()-parentBorderWidthX-w());
-                    Clip(newY,
-                            parent()->y()+parentBorderWidthY,
-                            parent()->y()+parent()->h()-parentBorderWidthY-h());
-                    position(newX, newY);
-                    RedrawParentWithBox();
-                    return 1;
+                    if (pDraggedToken) {
+                        int borderWidthX = Fl::box_dx(box());
+                        int borderWidthY = Fl::box_dy(box());
+                        int newX = Fl::event_x() - pDragOffsetX;
+                        int newY = Fl::event_y() - pDragOffsetY;
+                        
+                        Clip(newX,
+                                x()+borderWidthX,
+                                x()+w()-borderWidthX-tok->w());
+                        Clip(newY,
+                                y()+borderWidthY,
+                                y()+h()-borderWidthY-tok->h());
+
+                        auto[tokenX,tokenY] = pDraggedToken->Center();
+                        Cell* closestCell = Snap(tokenX, tokenY);
+                        if (!closestCell || closestCell->Empty() || closestCell->Content() == pDraggedToken)
+                            ChangeHighlightedCell(closestCell);
+
+                        pDraggedToken->position(newX, newY);
+                        parent()->redraw();
+                        return 1;
+                    }
+                    break;
                 }
                 case FL_RELEASE: {
                     //std::cout << "FL_RELEASE" << std::endl;
-                    parent()->init_sizes();
-                    RedrawParentWithBox();
-                    return 1;
+                    if (pDraggedToken) {
+                        auto[tokenX,tokenY] = pDraggedToken->Center();
+
+                        Cell* closestCell = Snap(tokenX, tokenY);
+                        if (closestCell && !closestCell->Empty() && closestCell->Content()!=pDraggedToken)
+                            closestCell = nullptr;
+                        else if (!closestCell && IsWithin(tokenX, tokenY, pBoard))
+                            closestCell = pDraggedToken->At();
+
+                        if (closestCell)
+                            MoveToken(pDraggedToken, closestCell);
+                        else {
+                            RemoveToken(pDraggedToken);
+                            Fl::belowmouse(this);
+                        }
+
+                        init_sizes();
+                        ChangeHighlightedCell(nullptr);
+                        pDraggedToken = nullptr;
+                        parent()->redraw();
+                        return 1;
+                    }
+                    break;
                 }
                 default:
                     break;
             }
-            return 0;
+            return Fl_Group::handle(event);
         }
 
-    private:
-
-        void RedrawParentWithBox() {
-            auto* p = parent();
-            while (p->box() == FL_NO_BOX && p->parent())
-                p = p->parent();
-            p->redraw();
+        void MoveToken(Token* tok, Cell* newLocation) {
+            if (tok->At())
+                tok->At()->Content(nullptr);
+            tok->At(newLocation);
+            newLocation->Content(tok);
+            tok->resize(newLocation->x(), newLocation->y(), newLocation->w(), newLocation->h());
         }
 
-        void TopLevel() {
-            parent()->insert(*this, parent()->children());
+        void RemoveToken(Token* tok) {
+            if (tok->At())
+                tok->At()->Content(nullptr);
+            tok->At(nullptr);
+            pOutOfBoardView->insert(*tok, pOutOfBoardView->children());
         }
 
-        int offsetX;
-        int offsetY;
+        bool ChangeHighlightedCell(Cell* newCell) {
+            if (newCell != pHighlightedCell) {
+                if (pHighlightedCell)
+                    pHighlightedCell->ResetColor();
+                if (newCell)
+                    newCell->Highlight();
+                pHighlightedCell = newCell;
+                redraw();
+                return true;
+            }
+            return false;
+        }
 
-};
+        bool ChangeHighlightedToken(Token* newToken) {
+            if (newToken != pHighlightedToken) {
+                if (pHighlightedToken)
+                    pHighlightedToken->ResetColor();
+                if (newToken)
+                    newToken->Highlight();
+                pHighlightedToken = newToken;
+                redraw();
+                return true;
+            }
+            return false;
+        }
 
-class Board {
-    public:
-        void Init() {
-            int boardWidth = (kCellMargin+kTileSize)*kBoardWidthTiles + kCellMargin;
-            int boardHeight = (kCellMargin+kTileSize)*kBoardHeightTiles + kCellMargin;
-            pBoard = new CenteredGroup(boardWidth, boardHeight);
-            pBoard->box(FL_FLAT_BOX);
-            pBoard->color(FL_BLACK);
-            pBoard->end();
+        Cell* Snap(int X, int Y) {
+            Cell* cell = nullptr;
+            int s = TileSize();
+            int g = CellGap();
+            //int i = (Y - pBoard->y() - g)/(s+g);
+            //int j = (X - pBoard->x() - g)/(s+g);
+            int i = (Y - pBoard->y() + s)/(s+g) - 1;
+            int j = (X - pBoard->x() + s)/(s+g) - 1;
+            if (IsBetween(i, 0, kBoardHeightTiles-1) && IsBetween(j, 0, kBoardWidthTiles-1)) {
+                cell = At(i, j);
+                if (!IsWithin(X, Y, cell))
+                    cell = nullptr;
+            }
+            return cell;
+        }
+
+        Cell* At(int i, int j) {
+            return pCells[i*kBoardWidthTiles + j];
         }
 
         int TileSize() const {
@@ -205,53 +334,98 @@ class Board {
             return pCells[0]->x() - pBoard->x();
         }
 
-        Fl_Box* At(int i, int j) {
-            const auto* const_this = this;
-            return const_cast<Fl_Box*>(const_this->At(i,j));
+        int GetInitialWidth() {
+            int* s = sizes();
+            return s[1] - s[0];
         }
 
-        const Fl_Box* At(int i, int j) const {
-            return pCells[i*kBoardWidthTiles + j];
+        int GetInitialHeight() {
+            int* s = sizes();
+            return s[3] - s[2];
         }
 
-        const Fl_Box* Snap(int x, int y) const {
-            const Fl_Box* cell = nullptr;
-            if (IsWithin(x, y, pBoard)) {
-                int s = TileSize();
-                int g = CellGap();
-
-                int i = (y - pBoard->y() - g)/(s+g);
-                int j = (x - pBoard->x() - g)/(s+g);
-
-                cell = At(i, j);
-                if (!IsWithin(x, y, cell))
-                    cell = nullptr;
+        void InitBoard() {
+            int boardWidth = (kCellMargin+kTileSize)*kBoardWidthTiles + kCellMargin;
+            int boardHeight = (kCellMargin+kTileSize)*kBoardHeightTiles + kCellMargin;
+            auto[boardX,boardY] = AlignCenter(w(), h(), boardWidth, boardHeight);
+            pBoard = new Fl_Box(boardX, boardY, boardWidth, boardHeight);
+            pBoard->box(FL_FLAT_BOX);
+            pBoard->color(FL_BLACK);
+            for (size_t i = 0; i < kBoardHeightTiles; ++i) {
+                for (size_t j = 0; j < kBoardWidthTiles; ++j) {
+                    int cellX = boardX + kCellMargin + j*(kTileSize+kCellMargin);
+                    int cellY = boardY + kCellMargin + i*(kTileSize+kCellMargin);
+                    auto type = i == 0? Cell::GOAL : Cell::NORMAL;
+                    pCells[i*kBoardWidthTiles+j] = new Cell(cellX, cellY, type);
+                }
             }
-            return cell;
+
+            for (size_t i = 0; i < kBoardHeightTiles; ++i) {
+                int labelX = pBoard->x() - kTileSize - kCellMargin + kTileSize/4;
+                int labelY = pBoard->y() + kCellMargin + i*(kTileSize+kCellMargin) + kTileSize/4;
+                char label[] = {0, 0};
+                label[0] = '0' + (kBoardHeightTiles - i);
+                auto* labelBox = new Fl_Box(labelX, labelY, kTileSize/2, kTileSize/2);
+                labelBox->copy_label(label);
+                labelBox->color(FL_WHITE);
+                labelBox->box(FL_BORDER_BOX);
+            }
+
+            for (size_t j = 0; j < kBoardWidthTiles; ++j) {
+                int labelX = pBoard->x() + kCellMargin + j*(kTileSize+kCellMargin) + kTileSize/4;
+                int labelY = pBoard->y() + pBoard->h() + kCellMargin + kTileSize/4;
+                char label[] = {0, 0};
+                label[0] = 'A' + j;
+                auto* labelBox = new Fl_Box(labelX, labelY, kTileSize/2, kTileSize/2);
+                labelBox->copy_label(label);
+                labelBox->color(FL_WHITE);
+                labelBox->box(FL_BORDER_BOX);
+            }
         }
 
-        Fl_Box* Snap(int x, int y) {
-            const auto* const_this = this;
-            return const_cast<Fl_Box*>(const_this->Snap(x, y));
+        void InitOutOfBoardView() {
+            const int margin = 20;
+            int outOfBoardX = x()+margin;
+            int outOfBoardY = y()+margin;
+            int outOfBoardW = w() - 2*margin;
+            pOutOfBoardView = new Fl_Pack(outOfBoardX, outOfBoardY, outOfBoardW, kTileSize);
+            pOutOfBoardView->type(Fl_Pack::HORIZONTAL);
+            pOutOfBoardView->resizable(pOutOfBoardView);
+            pOutOfBoardView->end();
         }
 
-    private:
+        Fl_Box* pBoard;
+        std::vector<Cell*> pCells;
+        Token* pHighlightedToken;
+        Token* pDraggedToken;
+        Cell* pHighlightedCell;
+        Fl_Group* pOutOfBoardView;
+        int pDragOffsetX;
+        int pDragOffsetY;
+        bool pEditable;
 
-        Fl_Group* pBoard;
-        std::vector<Fl_Box*> pCells;
+};
 
+class FlLock {
+    public:
+        FlLock() {
+            Fl::lock();
+        }
+
+        ~FlLock() {
+            Fl::unlock();
+            Fl::awake();
+        }
 };
 
 } // anonymous ns
 
 class GameGUI::Impl {
     public:
-        Impl() {
-            pWin = std::make_unique<Fl_Window>(kDefaultWindowWidth, kDefaultWindowHeight);
+        Impl(bool editable) : pEditable(editable) {
+            pWin = std::make_unique<Fl_Window>(kDefaultWindowWidth, kDefaultWindowHeight, "Hey!");
             InitSplitWindow();
             pWin->end();
-            pWin->resizable(pWin.get());
-            Fl::lock();
         }
 
         void SetBoardStatus(const TokenArray& tokens) {
@@ -280,6 +454,8 @@ class GameGUI::Impl {
         }
 
         int Run(int argc, char* argv[]) {
+            Fl::lock();
+            pWin->resizable(pWin.get());
             pWin->show(argc, argv);
             return Fl::run();
         }
@@ -303,15 +479,12 @@ class GameGUI::Impl {
 
         void InitMainView() {
             auto* p = Fl_Group::current();
-            int topTileHeight = kDefaultMainViewArea*p->h();
+            int topTileHeight = p->h() - kDefaultTerminalHeight;
             auto* topTile = new Fl_Group(p->x(), p->y(), p->w(), topTileHeight);
             topTile->box(FL_DOWN_BOX);
-            pMainView = new CenteredGroup(p->w(), topTileHeight);
-
-            new MovableToken(50, 50, 50, "Hey!");
-
-            pBoard.Init();
-
+            topTile->clip_children(1);
+            pMainView = new GameArea(pEditable);
+            new Token(50, 50, "Hey!");
             pMainView->end();
             topTile->end();
         }
@@ -328,14 +501,14 @@ class GameGUI::Impl {
         }
 
         std::unique_ptr<Fl_Window> pWin;
-        Fl_Group* pMainView;
-        Board pBoard;
+        GameArea* pMainView;
         Fl_Simple_Terminal* pLogTerminal;
+        bool pEditable;
         
 };
 
 
-GameGUI::GameGUI() : pImpl(new Impl) {
+GameGUI::GameGUI(bool editable) : pImpl(new Impl(editable)) {
 
 }
 

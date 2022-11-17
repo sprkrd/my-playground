@@ -17,7 +17,7 @@ target_link_libraries(resize fltk)
 add_executable(pack pack.cpp)
 target_link_libraries(pack fltk)
 
-add_library(iri_board_gui game_gui.cpp)
+add_library(iri_board_gui SHARED game_gui.cpp)
 target_link_libraries(iri_board_gui fltk_SHARED)
 
 add_executable(game_gui_test game_gui_test.cpp)

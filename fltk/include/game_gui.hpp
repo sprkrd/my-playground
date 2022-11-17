@@ -5,11 +5,12 @@
 
 constexpr int kBoardWidthTiles = 5;
 constexpr int kBoardHeightTiles = 4;
-constexpr int kTileSize = 50;
-constexpr int kCellMargin = 20;
+constexpr int kNumberOfCells = kBoardWidthTiles*kBoardHeightTiles;
+constexpr int kTileSize = 65;
+constexpr int kCellMargin = 15;
 constexpr int kDefaultWindowWidth = 800;
 constexpr int kDefaultWindowHeight = 640;
-constexpr double kDefaultMainViewArea = 0.8;
+constexpr int kDefaultTerminalHeight = 100;
 
 typedef std::vector<std::string> TokenArray;
 
@@ -18,7 +19,7 @@ class GameGUI {
 
         enum LogLevel { INFO = 0, WARN, ERROR };
 
-        GameGUI();
+        GameGUI(bool editable = true);
 
         void SetBoardStatus(const TokenArray& tokens);
 
