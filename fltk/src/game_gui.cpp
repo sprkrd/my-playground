@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <ctime>
-#include <iostream>
 #include <stdexcept>
 #include <tuple>
 
@@ -199,7 +198,6 @@ class GameArea : public Fl_Group {
                     pCells[i]->Content(nullptr);
                 }
                 if (!array[i].empty()) {
-                    std::cout << i << ' ' << array[i] << std::endl;
                     Token* tok = new Token(0, 0, kTileSize, array[i]);
                     MoveToken(tok, pCells[i]);
                 }
@@ -240,7 +238,6 @@ class GameArea : public Fl_Group {
                 }
                 case FL_PUSH: {
                     if (Fl::event_button()==FL_LEFT_MOUSE && tok) {
-                        //std::cout << "FL_PUSH" << std::endl;
                         pDragOffsetX = Fl::event_x() - tok->x();
                         pDragOffsetY = Fl::event_y() - tok->y();
                         pDraggedToken = tok;
@@ -276,7 +273,6 @@ class GameArea : public Fl_Group {
                     break;
                 }
                 case FL_RELEASE: {
-                    //std::cout << "FL_RELEASE" << std::endl;
                     if (pDraggedToken) {
                         auto[tokenX,tokenY] = pDraggedToken->Center();
 
