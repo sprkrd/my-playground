@@ -1,0 +1,2 @@
+input()
+print(max(input().split()or'0',key=lambda x:(-int(x)**4,x)))

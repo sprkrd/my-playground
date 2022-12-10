@@ -1,0 +1,4 @@
+l,m,x,y=map(int,input().split())
+z=[""]*99
+d,e=l-x,m-y
+print("\n".join(u+v for u,v in zip(["N"]*-e+["S"]*e+z,["E"]*d+["W"]*-d+z)))

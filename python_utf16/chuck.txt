@@ -1,0 +1,2 @@
+import re
+print(" ".join("0"*(1+(y[0]=="0"))+" "+"0"*len(y) for y in re.findall("0+|1+","".join(f"{ord(y):07b}"for y in input()))))
