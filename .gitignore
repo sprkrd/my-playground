@@ -1,3 +1,11 @@
+https://stackoverflow.com/questions/19023550/how-do-i-add-files-without-dots-in-them-all-extension-less-files-to-the-gitign
+*
+!/**/
+!*.*
+!Makefile
+
+*.x
+
 # Created by https://www.toptal.com/developers/gitignore/api/c++,python,vim,c
 # Edit at https://www.toptal.com/developers/gitignore?templates=c++,python,vim,c
 
