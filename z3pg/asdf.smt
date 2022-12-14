@@ -1,0 +1,15 @@
+;(declare-fun x () (_ BitVec 5))
+;(declare-fun y () (_ BitVec 5))
+;(declare-fun mybit0 () Bool)
+;(assert (= (= #b1 ((_ extract 0 0) x)) mybit0 ))
+;(assert (bvugt y x))
+;(assert mybit0)
+;(check-sat)
+;(get-model)
+
+(declare-const x Bool)
+(declare-const y Bool)
+(assert (not (and x y)))
+(check-sat)
+(get-model)
+
