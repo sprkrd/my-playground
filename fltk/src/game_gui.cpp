@@ -9,7 +9,7 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Double_Window.H>
 #include <FL/Fl_Pack.H>
-#include <FL/Fl_Simple_Terminal.H>
+#include <FL/Fl_Terminal.H>
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Tile.H>
 #include <FL/names.h>
@@ -535,7 +535,7 @@ class GameGUI::Impl {
             auto* lastChild = p->child(p->children()-1);
             int logTerminalY = lastChild->x() + lastChild->h();
             int logTerminalHeight = p->h() - lastChild->h();
-            pLogTerminal = new Fl_Simple_Terminal(p->x(), logTerminalY, p->w(), logTerminalHeight);
+            pLogTerminal = new Fl_Terminal(p->x(), logTerminalY, p->w(), logTerminalHeight);
             pLogTerminal->box(FL_DOWN_BOX);
             pLogTerminal->ansi(true);
             pLogTerminal->end();
@@ -543,7 +543,7 @@ class GameGUI::Impl {
 
         std::unique_ptr<Fl_Window> pWin;
         GameArea* pMainView;
-        Fl_Simple_Terminal* pLogTerminal;
+        Fl_Terminal* pLogTerminal;
         bool pEditable;
         
 };

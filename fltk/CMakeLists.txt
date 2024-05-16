@@ -13,7 +13,7 @@ project(fltk_playground)
 
 # set(FLTK_DIR /path/to/fltk)
 
-find_package(FLTK REQUIRED NO_MODULE)
+find_package(FLTK CONFIG REQUIRED NO_MODULE)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
