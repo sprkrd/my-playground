@@ -18,9 +18,12 @@ if (NOT GLFW_POPULATED)
     FetchContent_MakeAvailable(GLFW)
 endif()
 
+find_package(OpenGL REQUIRED COMPONENTS OpenGL)
+
+include_directories(${OPENGL_INCLUDE_DIR})
 
 add_executable(main src/main.cpp)
 target_compile_features(main PRIVATE cxx_std_17)
 
 
-target_link_libraries(main PRIVATE glfw GL)
+target_link_libraries(main PRIVATE glfw OpenGL::GL)
