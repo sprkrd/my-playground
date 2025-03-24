@@ -1,8 +1,10 @@
 link_libraries(SFML::Graphics SFML::Window)
-#target_compile_features(main PRIVATE cxx_std_17)
 
 function (add_example exampleName)
 add_executable(${exampleName} ${exampleName}.cpp)
+set_target_properties(${exampleName} PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY "${EXAMPLES_OUTPUT_DIR}"
+)
 endfunction()
 
 add_example(window_tutorial)
