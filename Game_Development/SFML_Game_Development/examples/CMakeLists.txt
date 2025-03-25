@@ -4,6 +4,8 @@ function (add_example exampleName)
 add_executable(${exampleName} ${exampleName}.cpp)
 set_target_properties(${exampleName} PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY "${EXAMPLES_OUTPUT_DIRECTORY}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${EXAMPLES_OUTPUT_DIRECTORY_RELEASE}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${EXAMPLES_OUTPUT_DIRECTORY_DEBUG}"
 )
 endfunction()
 
