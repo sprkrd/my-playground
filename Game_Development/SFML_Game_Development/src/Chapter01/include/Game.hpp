@@ -1,3 +1,5 @@
+#pragma once
+
 #include <SFML/Graphics.hpp>
 
 constexpr float kPlayerSpeed = 500.f;
