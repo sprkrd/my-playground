@@ -1,7 +1,6 @@
 #include "Game.hpp"
 
 #include <filesystem>
-#include <iostream>
 
 namespace
 {
@@ -13,6 +12,7 @@ const sf::Texture kNullTexture;
 Game::Game(int argc, char* argv[])
 : mWindow(sf::VideoMode({640,480}), "SFML Application")
 , mPlayer(kNullTexture)
+, mResourceManager(ResourceManager::fromExePath(argv[0]))
 , mFps(0)
 , mVsync(true)
 , mIsMovingUp(false)
@@ -22,7 +22,7 @@ Game::Game(int argc, char* argv[])
 {
     mWindow.setVerticalSyncEnabled(mVsync);
 
-    loadAssets(argv[0]);
+    loadAssets();
 
     mPlayer.setPosition({100.f, 100.f});
     // mPlayer.setRadius(40.f);
@@ -60,24 +60,12 @@ void Game::run()
     }
 }
 
-void Game::loadAssets(const char *binPath)
+void Game::loadAssets()
 {
-    std::filesystem::path assetsPath(binPath);
-    assetsPath = assetsPath.parent_path().parent_path();
-    assetsPath /= "assets";
-    mAssetsPath = std::filesystem::absolute(assetsPath);
+    mResourceManager.load<sf::Texture>(TextureId::Airplane, "Eagle.png");
+    mResourceManager.load<sf::Font>(FontId::GameOver, "game_over.ttf");
 
-    if (!mFont.openFromFile(mAssetsPath / "fonts" / "game_over.ttf"))
-    {
-        std::cerr << "[ERROR] Couldn't open font file\n";
-    }
-
-    if (!mTexture.loadFromFile(mAssetsPath / "textures" / "Eagle.png"))
-    {
-        std::cerr << "[ERROR] Couldn't load texture Eagle.png\n";
-    }
-
-    mPlayer.setTexture(mTexture, true);
+    mPlayer.setTexture(mResourceManager.get<sf::Texture>(TextureId::Airplane), true);
 }
 
 void Game::shutdown()
@@ -171,7 +159,8 @@ void Game::renderUI()
     auto currentView = mWindow.getView();
     sf::View uiView(sf::FloatRect({0.f, 0.f}, sf::Vector2f(mWindow.getSize())));
     mWindow.setView(uiView);
-    sf::Text fpsText(mFont, "FPS: " + std::to_string(mFps));
+    const auto& font = mResourceManager.get<sf::Font>(FontId::GameOver);
+    sf::Text fpsText(font, "FPS: " + std::to_string(mFps));
     fpsText.setCharacterSize(48);
     fpsText.setFillColor(sf::Color::White);
     mWindow.draw(fpsText);

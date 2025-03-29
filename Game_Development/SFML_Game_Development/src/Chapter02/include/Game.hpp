@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ResourceManager.hpp"
 #include <SFML/Graphics.hpp>
 
 constexpr float kPlayerSpeed = 500.f;
@@ -14,7 +15,7 @@ class Game
 
     private:
 
-        void loadAssets(const char* binPath);
+        void loadAssets();
 
         void shutdown();
 
@@ -31,12 +32,9 @@ class Game
     private:
 
         sf::RenderWindow mWindow;
-        sf::Texture mTexture;
         sf::Sprite mPlayer;
 
-        std::filesystem::path mAssetsPath;
-
-        sf::Font mFont;
+        ResourceManager mResourceManager;
 
         int mFps;
         bool mVsync;
