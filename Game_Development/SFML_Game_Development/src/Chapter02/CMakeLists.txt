@@ -9,7 +9,6 @@ set(HEADER_FILES
 )
 set(SOURCE_FILES
     Game.cpp
-    ResourceHolder.cpp
     ResourceManager.cpp
     ${BINARY_NAME}.cpp
 )
