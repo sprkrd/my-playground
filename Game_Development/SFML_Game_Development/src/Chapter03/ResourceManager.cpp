@@ -2,6 +2,17 @@
 
 #include <cassert>
 
+std::optional<ResourceManager> ResourceManager::globalResourceManager;
+
+ResourceManager& ResourceManager::getGlobalResourceManager()
+{
+	return globalResourceManager.value();
+}
+
+void ResourceManager::initGlobalResourceManager(const char* exePath)
+{
+    globalResourceManager = fromExePath(exePath);
+}
 
 ResourceManager ResourceManager::fromExePath(const char *exePath)
 {

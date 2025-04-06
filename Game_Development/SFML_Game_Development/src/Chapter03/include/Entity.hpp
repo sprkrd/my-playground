@@ -2,10 +2,14 @@
 
 #include <SFML/System.hpp>
 
+#include "ResourceManager.hpp"
+#include "SceneNode.hpp"
 
-class Entity
+class Entity : public SceneNode
 {
     public:
+
+        typedef std::unique_ptr<Entity> Ptr;
 
         Entity();
 
@@ -37,6 +41,12 @@ class Aircraft : public Entity
         explicit Aircraft(Type type);
 
     private:
+
+        virtual void drawCurrent(sf::RenderTarget& target,
+                const sf::RenderStates& states) const override;
+
+    private:
         Type mType;
+        sf::Sprite mSprite;
 };
 

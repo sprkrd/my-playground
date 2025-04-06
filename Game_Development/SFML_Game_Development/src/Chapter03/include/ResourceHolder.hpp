@@ -7,9 +7,8 @@
 #include <memory>
 
 enum class TextureId {
-    Landscape,
-    Airplane,
-    Missile,
+    Eagle,
+    Raptor,
     Null
 };
 
@@ -68,7 +67,7 @@ class ResourceHolder
 
         typedef ResourceIdValue<Resource> ResourceId;
 
-        ResourceHolder(const std::filesystem::path& resourcePath)
+        explicit ResourceHolder(const std::filesystem::path& resourcePath)
         : mResourcePath(resourcePath)
         {
 

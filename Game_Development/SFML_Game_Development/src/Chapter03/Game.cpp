@@ -1,30 +1,23 @@
 #include "Game.hpp"
 
+#include <iostream>
 #include <filesystem>
 
-namespace
-{
-
-const sf::Texture kNullTexture;
-
-}
 
 Game::Game(int argc, char* argv[])
-: mWindow(sf::VideoMode({640,480}), "SFML Application")
-, mPlayer(kNullTexture)
-, mResourceManager(ResourceManager::fromExePath(argv[0]))
-, mFps(0)
-, mVsync(true)
-, mIsMovingUp(false)
-, mIsMovingDown(false)
-, mIsMovingLeft(false)
-, mIsMovingRight(false)
+    : mWindow(sf::VideoMode({640,480}), "SFML Application")
+    , mFps(0)
+    , mVsync(true)
+    , mIsMovingUp(false)
+    , mIsMovingDown(false)
+    , mIsMovingLeft(false)
+    , mIsMovingRight(false)
 {
     mWindow.setVerticalSyncEnabled(mVsync);
 
-    loadAssets();
+    loadAssets(argv[0]);
 
-    mPlayer.setPosition({100.f, 100.f});
+    mPlayer->setPosition({100.f, 100.f});
     // mPlayer.setRadius(40.f);
     // mPlayer.setColor(sf::Color::Cyan);
 }
@@ -60,12 +53,18 @@ void Game::run()
     }
 }
 
-void Game::loadAssets()
+void Game::loadAssets(const char* exePath)
 {
-    mResourceManager.load<sf::Texture>(TextureId::Airplane, "Eagle.png");
-    mResourceManager.load<sf::Font>(FontId::GameOver, "game_over.ttf");
+    std::cout << "loading assets" << std::endl;
+    ResourceManager::initGlobalResourceManager(exePath);
 
-    mPlayer.setTexture(mResourceManager.get<sf::Texture>(TextureId::Airplane), true);
+    auto& resourceManager = ResourceManager::getGlobalResourceManager();
+
+    resourceManager.load<sf::Texture>(TextureId::Eagle, "Eagle.png");
+    resourceManager.load<sf::Font>(FontId::GameOver, "game_over.ttf");
+
+    mPlayer = std::make_unique<Aircraft>(Aircraft::Eagle);
+    mPlayer->setPosition({100.f, 100.f});
 }
 
 void Game::shutdown()
@@ -141,14 +140,14 @@ void Game::update(float deltaTime)
         movement.x -= kPlayerSpeed;
 	if (mIsMovingRight)
         movement.x += kPlayerSpeed;
-    mPlayer.move(movement*deltaTime);
+    mPlayer->move(movement*deltaTime);
 }
 
 void Game::render()
 {
     mWindow.clear();
 
-    mWindow.draw(mPlayer);
+    mWindow.draw(*mPlayer);
     renderUI();
 
     mWindow.display();
@@ -156,10 +155,11 @@ void Game::render()
 
 void Game::renderUI()
 {
+    const auto& resourceManager = ResourceManager::getGlobalResourceManager();
     auto currentView = mWindow.getView();
     sf::View uiView(sf::FloatRect({0.f, 0.f}, sf::Vector2f(mWindow.getSize())));
     mWindow.setView(uiView);
-    const auto& font = mResourceManager.get<sf::Font>(FontId::GameOver);
+    const auto& font = resourceManager.get<sf::Font>(FontId::GameOver);
     sf::Text fpsText(font, "FPS: " + std::to_string(mFps));
     fpsText.setCharacterSize(48);
     fpsText.setFillColor(sf::Color::White);

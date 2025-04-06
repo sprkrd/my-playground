@@ -1,5 +1,25 @@
 #include "include/Entity.hpp"
 
+
+const sf::Texture& toTexture(Aircraft::Type type)
+{
+    const auto& resourceManager = ResourceManager::getGlobalResourceManager();
+    TextureId textureId;
+    switch (type)
+    {
+        case Aircraft::Eagle:
+            textureId = TextureId::Eagle;
+            break;
+        case Aircraft::Raptor:
+            textureId = TextureId::Raptor;
+            break;
+        default:
+            textureId = TextureId::Null;
+            break;
+    }
+    return resourceManager.get<sf::Texture>(textureId);
+}
+
 Entity::Entity()
     : mPosition(0, 0)
     , mVelocity(0, 0)
@@ -23,6 +43,17 @@ sf::Vector2f Entity::getVelocity() const
 }
 
 Aircraft::Aircraft(Type type)
-: mType(type)
+    : mType(type)
+    , mSprite(toTexture(type))
 {
+    auto bounds = mSprite.getLocalBounds();
+    mSprite.setOrigin(bounds.size/2.f);
 }
+
+void Aircraft::drawCurrent(sf::RenderTarget& target,
+		const sf::RenderStates& states) const
+{
+    target.draw(mSprite, states);
+}
+
+

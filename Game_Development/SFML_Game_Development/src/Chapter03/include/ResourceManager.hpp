@@ -6,7 +6,13 @@ class ResourceManager
 {
     public:
 
+        static ResourceManager& getGlobalResourceManager();
+
+        static void initGlobalResourceManager(const char* exePath);
+
         static ResourceManager fromExePath(const char* exePath);
+
+    public:
 
         ResourceManager(const std::filesystem::path& assetsPath);
 
@@ -40,6 +46,8 @@ class ResourceManager
         }
 
     private:
+
+        static std::optional<ResourceManager> globalResourceManager;
 
         // [private methods]
 

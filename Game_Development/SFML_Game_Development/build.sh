@@ -28,3 +28,5 @@ fi
 
 cd "build/$build_type"
 make all -j
+
+cp compile_commands.json ../..
