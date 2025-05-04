@@ -16,9 +16,8 @@ void ResourceManager::initGlobalResourceManager(const char* exePath)
 
 ResourceManager ResourceManager::fromExePath(const char *exePath)
 {
-    std::filesystem::path assetsPath(exePath);
+    std::filesystem::path assetsPath(std::filesystem::absolute(exePath).lexically_normal());
     assetsPath = assetsPath.parent_path().parent_path()/"assets";
-    assetsPath = std::filesystem::absolute(assetsPath);
     return ResourceManager(assetsPath);
 }
 

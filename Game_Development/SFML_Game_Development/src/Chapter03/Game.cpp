@@ -1,6 +1,5 @@
 #include "Game.hpp"
 
-#include <iostream>
 #include <filesystem>
 
 
@@ -55,7 +54,6 @@ void Game::run()
 
 void Game::loadAssets(const char* exePath)
 {
-    std::cout << "loading assets" << std::endl;
     ResourceManager::initGlobalResourceManager(exePath);
 
     auto& resourceManager = ResourceManager::getGlobalResourceManager();
