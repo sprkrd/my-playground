@@ -14,7 +14,7 @@ class ResourceManager
 
     public:
 
-        ResourceManager(const std::filesystem::path& assetsPath);
+        explicit ResourceManager(const std::filesystem::path& assetsPath);
 
         template<class Resource, class... Args>
         void load(ResourceIdValue<Resource> id, const std::filesystem::path& relativePath, Args&& ...args)

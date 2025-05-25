@@ -15,10 +15,6 @@ Game::Game(int argc, char* argv[])
     mWindow.setVerticalSyncEnabled(mVsync);
 
     loadAssets(argv[0]);
-
-    mPlayer->setPosition({100.f, 100.f});
-    // mPlayer.setRadius(40.f);
-    // mPlayer.setColor(sf::Color::Cyan);
 }
 
 void Game::run()

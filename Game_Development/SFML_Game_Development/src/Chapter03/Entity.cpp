@@ -47,13 +47,19 @@ Aircraft::Aircraft(Type type)
     , mSprite(toTexture(type))
 {
     auto bounds = mSprite.getLocalBounds();
-    mSprite.setOrigin(bounds.size/2.f);
+    this->setOrigin(bounds.size/2.f);
+    //mSprite.setOrigin(bounds.size/2.f);
 }
 
 void Aircraft::drawCurrent(sf::RenderTarget& target,
 		const sf::RenderStates& states) const
 {
     target.draw(mSprite, states);
+    sf::RectangleShape bb(mSprite.getLocalBounds().size);
+    bb.setFillColor(sf::Color::Transparent);
+    bb.setOutlineColor(sf::Color::Red);
+    bb.setOutlineThickness(1);
+    target.draw(bb, states);
 }
 
 
