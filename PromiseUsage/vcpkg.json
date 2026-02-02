@@ -1,0 +1,9 @@
+{
+  "name" : "promiseusage",
+  "version-string" : "1.0.0",
+  "builtin-baseline" : "6d7bf7ef2193e2d1c5798a5ff8811d533104c861",
+  "dependencies" : [ {
+    "name" : "boost-circular-buffer",
+    "version>=" : "1.90.0#1"
+  } ]
+}
